@@ -76,11 +76,11 @@ impl DefenderKind {
     }
     fn hp(self) -> f32 {
         match self {
-            Self::Pencil => 80.0,
-            Self::Notebook => 300.0,
-            Self::Highlighter => 60.0,
-            Self::Pen => 70.0,
-            Self::Marker => 50.0,
+            Self::Pencil => 100.0,
+            Self::Notebook => 450.0,
+            Self::Highlighter => 100.0,
+            Self::Pen => 100.0,
+            Self::Marker => 100.0,
         }
     }
     fn color(self) -> egui::Color32 {
@@ -629,8 +629,8 @@ impl Game {
         }
 
         // Add income (difficulty ramps within wave), minus preview cost spread across miniwaves
-        self.wallet += wave_difficulty(self.wave, self.miniwave)
-            - self.preview_cost / MINIWAVES as f32;
+        self.wallet +=
+            wave_difficulty(self.wave, self.miniwave) - self.preview_cost / MINIWAVES as f32;
 
         // Start-of-wave introduction (miniwave 0)
         if self.miniwave == 0 && !self.start_intro_done {
