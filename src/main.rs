@@ -467,9 +467,6 @@ fn load_highscore() -> Option<f64> {
 #[cfg(target_arch = "wasm32")]
 fn save_highscore(_time: f64) {}
 
-// 100 HP over one wave (25 miniwaves * 3s = 75s)
-const DEFENDER_REGEN_RATE: f32 = 100.0 / (MINIWAVES as f32 * MINIWAVE_INTERVAL);
-
 struct DeathEffect {
     x: f32,
     y: f32,
@@ -597,6 +594,17 @@ impl Game {
         if !self.pathway_introduced[pidx] {
             self.pathway_introduced[pidx] = true;
         } else if self.pathway_level[pidx] + 1 < self.pathways[pidx].levels.len() {
+            // Block ElectronicEraser upgrade before wave 6 mid-wave
+            let next_level = self.pathway_level[pidx] + 1;
+            let has_electronic = matches!(
+                self.pathways[pidx].levels[next_level],
+                PathwayLevel::Single(EnemyKind::ElectronicEraser)
+                    | PathwayLevel::CoinFlip(EnemyKind::ElectronicEraser, _)
+                    | PathwayLevel::CoinFlip(_, EnemyKind::ElectronicEraser)
+            );
+            if has_electronic && (self.wave < 6 || !self.mid_intro_done) {
+                return;
+            }
             self.pathway_level[pidx] += 1;
         }
     }
@@ -776,7 +784,19 @@ impl Game {
         c: egui::Pos2,
         scale: f32,
     ) {
+        Self::draw_defender_sprite_hp(painter, kind, c, scale, 1.0);
+    }
+
+    fn draw_defender_sprite_hp(
+        painter: &egui::Painter,
+        kind: DefenderKind,
+        c: egui::Pos2,
+        scale: f32,
+        hp_frac: f32,
+    ) {
         let s = scale;
+        let damaged = hp_frac < 0.66;
+        let critical = hp_frac < 0.33;
         match kind {
             DefenderKind::Pencil => {
                 let body = egui::Rect::from_min_size(
@@ -820,6 +840,28 @@ impl Game {
                     egui::vec2(3.0 * s, 10.0 * s),
                 );
                 painter.rect_filled(band, 0.0, egui::Color32::from_rgb(180, 180, 190));
+                // Damage: scratches on the body
+                let scratch = egui::Stroke::new(1.0 * s, egui::Color32::from_rgb(160, 140, 30));
+                if damaged {
+                    painter.line_segment(
+                        [egui::pos2(c.x - 8.0 * s, c.y - 5.0 * s),
+                         egui::pos2(c.x - 4.0 * s, c.y + 5.0 * s)],
+                        scratch,
+                    );
+                }
+                if critical {
+                    painter.line_segment(
+                        [egui::pos2(c.x + 2.0 * s, c.y - 5.0 * s),
+                         egui::pos2(c.x - 2.0 * s, c.y + 5.0 * s)],
+                        scratch,
+                    );
+                    // Chip on tip
+                    painter.line_segment(
+                        [egui::pos2(body.max.x + 6.0 * s, c.y - 4.0 * s),
+                         egui::pos2(body.max.x + 10.0 * s, c.y + 1.0 * s)],
+                        scratch,
+                    );
+                }
             }
             DefenderKind::Pen => {
                 let body = egui::Rect::from_min_size(
@@ -862,6 +904,22 @@ impl Game {
                     egui::vec2(4.0 * s, 8.0 * s),
                 );
                 painter.rect_filled(cap, 2.0 * s, egui::Color32::from_rgb(25, 25, 35));
+                // Damage: cracks on pen body
+                let scratch = egui::Stroke::new(1.0 * s, egui::Color32::from_rgb(80, 80, 100));
+                if damaged {
+                    painter.line_segment(
+                        [egui::pos2(c.x - 6.0 * s, c.y - 4.0 * s),
+                         egui::pos2(c.x - 2.0 * s, c.y + 4.0 * s)],
+                        scratch,
+                    );
+                }
+                if critical {
+                    painter.line_segment(
+                        [egui::pos2(c.x + 4.0 * s, c.y - 4.0 * s),
+                         egui::pos2(c.x, c.y + 4.0 * s)],
+                        scratch,
+                    );
+                }
             }
             DefenderKind::Notebook => {
                 let r = egui::Rect::from_center_size(c, egui::vec2(30.0 * s, 40.0 * s));
@@ -880,6 +938,37 @@ impl Game {
                             egui::pos2(r.max.x - 5.0 * s, y),
                         ],
                         egui::Stroke::new(0.5 * s, egui::Color32::from_rgb(70, 100, 160)),
+                    );
+                }
+                // Damage: torn corners and cracks
+                let crack_color = egui::Color32::from_rgb(40, 60, 110);
+                let crack_stroke = egui::Stroke::new(1.5 * s, crack_color);
+                if damaged {
+                    // Diagonal crack across top-right
+                    painter.line_segment(
+                        [egui::pos2(r.max.x - 8.0 * s, r.min.y + 2.0 * s),
+                         egui::pos2(r.max.x - 2.0 * s, r.min.y + 14.0 * s)],
+                        crack_stroke,
+                    );
+                    // Torn bottom-left corner
+                    painter.line_segment(
+                        [egui::pos2(r.min.x, r.max.y - 8.0 * s),
+                         egui::pos2(r.min.x + 6.0 * s, r.max.y)],
+                        crack_stroke,
+                    );
+                }
+                if critical {
+                    // Large crack through middle
+                    painter.line_segment(
+                        [egui::pos2(r.min.x + 3.0 * s, c.y - 4.0 * s),
+                         egui::pos2(r.max.x - 3.0 * s, c.y + 6.0 * s)],
+                        crack_stroke,
+                    );
+                    // Another torn corner top-left
+                    painter.line_segment(
+                        [egui::pos2(r.min.x, r.min.y + 6.0 * s),
+                         egui::pos2(r.min.x + 8.0 * s, r.min.y)],
+                        crack_stroke,
                     );
                 }
             }
@@ -911,6 +1000,22 @@ impl Game {
                     egui::vec2(4.0 * s, 10.0 * s),
                 );
                 painter.rect_filled(cap, 1.0 * s, egui::Color32::from_rgb(180, 210, 30));
+                // Damage: scratches
+                let scratch = egui::Stroke::new(1.0 * s, egui::Color32::from_rgb(160, 190, 20));
+                if damaged {
+                    painter.line_segment(
+                        [egui::pos2(c.x - 6.0 * s, c.y - 5.0 * s),
+                         egui::pos2(c.x - 2.0 * s, c.y + 5.0 * s)],
+                        scratch,
+                    );
+                }
+                if critical {
+                    painter.line_segment(
+                        [egui::pos2(c.x + 4.0 * s, c.y - 5.0 * s),
+                         egui::pos2(c.x, c.y + 5.0 * s)],
+                        scratch,
+                    );
+                }
             }
             DefenderKind::Marker => {
                 // Dark body (like a Sharpie)
@@ -955,6 +1060,22 @@ impl Game {
                     egui::vec2(4.0 * s, 10.0 * s),
                 );
                 painter.rect_filled(band, 0.0, egui::Color32::from_rgb(200, 40, 40));
+                // Damage: scratches on body
+                let scratch = egui::Stroke::new(1.0 * s, egui::Color32::from_rgb(80, 80, 85));
+                if damaged {
+                    painter.line_segment(
+                        [egui::pos2(c.x - 4.0 * s, c.y - 5.0 * s),
+                         egui::pos2(c.x, c.y + 5.0 * s)],
+                        scratch,
+                    );
+                }
+                if critical {
+                    painter.line_segment(
+                        [egui::pos2(c.x + 6.0 * s, c.y - 5.0 * s),
+                         egui::pos2(c.x + 2.0 * s, c.y + 5.0 * s)],
+                        scratch,
+                    );
+                }
             }
         }
     }
@@ -1485,13 +1606,6 @@ impl Game {
             }
         }
 
-        // Defender regen
-        for def in &mut self.defenders {
-            if def.hp > 0.0 {
-                def.hp = (def.hp + DEFENDER_REGEN_RATE * dt).min(def.kind.hp());
-            }
-        }
-
         // Update death effects
         for fx in &mut self.death_effects {
             fx.timer -= dt;
@@ -1870,7 +1984,8 @@ impl eframe::App for Game {
             // --- Draw defenders ---
             for def in &self.defenders {
                 let c = Self::cell_center(def.col, def.lane);
-                Self::draw_defender_sprite(painter, def.kind, c, 1.0);
+                let hp_frac = def.hp / def.kind.hp();
+                Self::draw_defender_sprite_hp(painter, def.kind, c, 1.0, hp_frac);
                 // Attack flash
                 if def.attack_flash > 0.0 {
                     let alpha = (def.attack_flash / 0.15 * 200.0) as u8;
@@ -1961,6 +2076,9 @@ impl eframe::App for Game {
             for enemy in &self.enemies {
                 let y = grid_o.y + enemy.lane as f32 * CELL_H + CELL_H / 2.0;
                 let x = enemy.x;
+                let hp_frac = enemy.hp / enemy.kind.base_hp();
+                let e_damaged = hp_frac < 0.66;
+                let e_critical = hp_frac < 0.33;
 
                 match enemy.kind {
                     EnemyKind::PinkEraser => {
@@ -1978,6 +2096,20 @@ impl eframe::App for Game {
                             0.0,
                             egui::Color32::from_rgb(220, 120, 145),
                         );
+                        // Damage: wear marks
+                        let scratch = egui::Stroke::new(1.0, egui::Color32::from_rgb(180, 100, 120));
+                        if e_damaged {
+                            painter.line_segment(
+                                [egui::pos2(x - 8.0, y - 8.0), egui::pos2(x - 4.0, y + 6.0)],
+                                scratch,
+                            );
+                        }
+                        if e_critical {
+                            painter.line_segment(
+                                [egui::pos2(x + 4.0, y - 6.0), egui::pos2(x + 8.0, y + 8.0)],
+                                scratch,
+                            );
+                        }
                     }
                     EnemyKind::WhitePolymer => {
                         let r =
@@ -1989,6 +2121,19 @@ impl eframe::App for Game {
                             egui::Stroke::new(1.0, egui::Color32::from_rgb(180, 180, 190)),
                             egui::StrokeKind::Outside,
                         );
+                        let scratch = egui::Stroke::new(1.0, egui::Color32::from_rgb(160, 160, 170));
+                        if e_damaged {
+                            painter.line_segment(
+                                [egui::pos2(x - 8.0, y - 8.0), egui::pos2(x - 4.0, y + 6.0)],
+                                scratch,
+                            );
+                        }
+                        if e_critical {
+                            painter.line_segment(
+                                [egui::pos2(x + 4.0, y - 6.0), egui::pos2(x + 8.0, y + 8.0)],
+                                scratch,
+                            );
+                        }
                     }
                     EnemyKind::WrappedPolymer => {
                         if enemy.shell_hp > 0.0 {
@@ -2032,6 +2177,19 @@ impl eframe::App for Game {
                             egui::Stroke::new(1.0, egui::Color32::from_rgb(20, 20, 25)),
                             egui::StrokeKind::Outside,
                         );
+                        let scratch = egui::Stroke::new(1.0, egui::Color32::from_rgb(70, 70, 80));
+                        if e_damaged {
+                            painter.line_segment(
+                                [egui::pos2(x - 8.0, y - 8.0), egui::pos2(x - 4.0, y + 6.0)],
+                                scratch,
+                            );
+                        }
+                        if e_critical {
+                            painter.line_segment(
+                                [egui::pos2(x + 4.0, y - 6.0), egui::pos2(x + 8.0, y + 8.0)],
+                                scratch,
+                            );
+                        }
                     }
                     EnemyKind::WrappedBlackEraser => {
                         if enemy.shell_hp > 0.0 {
@@ -2111,12 +2269,25 @@ impl eframe::App for Game {
                             egui::Stroke::new(0.5, egui::Color32::from_rgb(180, 180, 190)),
                             egui::StrokeKind::Outside,
                         );
+                        let scratch = egui::Stroke::new(1.0, egui::Color32::from_rgb(60, 60, 70));
+                        if e_damaged {
+                            painter.line_segment(
+                                [egui::pos2(x - 2.0, y - 5.0), egui::pos2(x + 2.0, y + 5.0)],
+                                scratch,
+                            );
+                        }
+                        if e_critical {
+                            painter.line_segment(
+                                [egui::pos2(x + 8.0, y - 5.0), egui::pos2(x + 12.0, y + 5.0)],
+                                scratch,
+                            );
+                        }
                     }
                     EnemyKind::Scissors | EnemyKind::BlueScissors => {
                         let (blade_c, handle_c, handle_stroke, sz) =
                             if enemy.kind == EnemyKind::BlueScissors {
                                 (
-                                    egui::Color32::from_rgb(100, 140, 220),
+                                    egui::Color32::from_rgb(230, 230, 240),
                                     egui::Color32::from_rgb(50, 80, 180),
                                     egui::Color32::from_rgb(30, 50, 130),
                                     1.2_f32,
@@ -2165,6 +2336,20 @@ impl eframe::App for Game {
                             5.0 * s,
                             egui::Stroke::new(1.0, handle_stroke),
                         );
+                        // Damage: nicks on blades
+                        let nick = egui::Stroke::new(1.5 * s, egui::Color32::from_rgb(120, 120, 130));
+                        if e_damaged {
+                            painter.line_segment(
+                                [egui::pos2(x - 4.0 * s, y - 2.0 * s), egui::pos2(x - 2.0 * s, y + 4.0 * s)],
+                                nick,
+                            );
+                        }
+                        if e_critical {
+                            painter.line_segment(
+                                [egui::pos2(x + 2.0 * s, y - 4.0 * s), egui::pos2(x + 4.0 * s, y + 2.0 * s)],
+                                nick,
+                            );
+                        }
                     }
                     EnemyKind::WhiteOut => {
                         let body =
@@ -2204,6 +2389,19 @@ impl eframe::App for Game {
                             1.0,
                             egui::Color32::from_rgb(50, 130, 200),
                         );
+                        let scratch = egui::Stroke::new(1.0, egui::Color32::from_rgb(160, 160, 170));
+                        if e_damaged {
+                            painter.line_segment(
+                                [egui::pos2(x - 8.0, y - 6.0), egui::pos2(x - 4.0, y + 4.0)],
+                                scratch,
+                            );
+                        }
+                        if e_critical {
+                            painter.line_segment(
+                                [egui::pos2(x + 6.0, y - 6.0), egui::pos2(x + 10.0, y + 4.0)],
+                                scratch,
+                            );
+                        }
                     }
                     EnemyKind::KneadedEraser => {
                         let hp_frac = enemy.hp / enemy.kind.base_hp();
@@ -2252,6 +2450,19 @@ impl eframe::App for Game {
                                 egui::Color32::from_rgba_premultiplied(255, 255, 255, 140),
                             ),
                         );
+                        let scratch = egui::Stroke::new(1.0, egui::Color32::from_rgba_premultiplied(80, 150, 190, 180));
+                        if e_damaged {
+                            painter.line_segment(
+                                [egui::pos2(r.min.x + 4.0, r.min.y + 4.0), egui::pos2(r.min.x + 8.0, r.max.y - 4.0)],
+                                scratch,
+                            );
+                        }
+                        if e_critical {
+                            painter.line_segment(
+                                [egui::pos2(r.max.x - 8.0, r.min.y + 4.0), egui::pos2(r.max.x - 4.0, r.max.y - 4.0)],
+                                scratch,
+                            );
+                        }
                     }
                     EnemyKind::ElectronicEraser => {
                         // Toothbrush-shaped body (handle)
@@ -2311,6 +2522,19 @@ impl eframe::App for Game {
                             [egui::pos2(x + 2.0, y - 3.0), egui::pos2(x + 2.0, y + 3.0)],
                             egui::Stroke::new(1.5, egui::Color32::from_rgb(80, 200, 240)),
                         );
+                        let scratch = egui::Stroke::new(1.0, egui::Color32::from_rgb(120, 120, 130));
+                        if e_damaged {
+                            painter.line_segment(
+                                [egui::pos2(x - 2.0, y - 4.0), egui::pos2(x + 2.0, y + 4.0)],
+                                scratch,
+                            );
+                        }
+                        if e_critical {
+                            painter.line_segment(
+                                [egui::pos2(x + 8.0, y - 4.0), egui::pos2(x + 12.0, y + 4.0)],
+                                scratch,
+                            );
+                        }
                     }
                 }
 
