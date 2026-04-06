@@ -167,7 +167,8 @@ impl EnemyKind {
         match self {
             Self::PinkEraser => 1.0,
             Self::WhitePolymer | Self::ShinyPlastic => 2.0,
-            Self::WrappedPolymer | Self::EraserHolder | Self::KneadedEraser => 3.0,
+            Self::EraserHolder => 2.5,
+            Self::WrappedPolymer | Self::KneadedEraser => 3.0,
             Self::Scissors => 3.5,
             Self::BlueEraserHolder | Self::LargeShinyPlastic => 4.0,
             Self::BlueScissors => 5.5,
@@ -232,6 +233,7 @@ impl EnemyKind {
     }
     fn base_damage(self) -> f32 {
         match self {
+            Self::BlueEraserHolder => 30.0,
             Self::ShinyPlastic => 40.0,
             Self::LargeShinyPlastic => 60.0,
             _ if self.instant_kills() => 0.0,
@@ -420,7 +422,7 @@ enum GameState {
 // Difficulty ramp per wave: (start, end) - linearly interpolated across miniwaves
 fn wave_difficulty(wave: usize, miniwave: usize) -> f32 {
     let (start, end) = match wave {
-        1 => (1.0, 1.5),
+        1 => (0.5, 1.5),
         2 => (2.0, 2.5),
         3 => (3.0, 3.5),
         4 => (4.5, 5.5),
@@ -499,6 +501,7 @@ struct Game {
     preview_miniwave: usize,
     preview_sent: bool,
     preview_pathway: Option<usize>,
+    preview_cost: f32,
 
     // Misc
     burst_timer: f32,
@@ -546,6 +549,7 @@ impl Game {
             preview_miniwave: preview_mw,
             preview_sent: false,
             preview_pathway: None,
+            preview_cost: 0.0,
             burst_timer: 0.0,
             initial_delay: 2.0,
             timeskip_given: false,
@@ -624,8 +628,9 @@ impl Game {
             self.invested = false;
         }
 
-        // Add income (difficulty ramps within wave)
-        self.wallet += wave_difficulty(self.wave, self.miniwave);
+        // Add income (difficulty ramps within wave), minus preview cost spread across miniwaves
+        self.wallet += wave_difficulty(self.wave, self.miniwave)
+            - self.preview_cost / MINIWAVES as f32;
 
         // Start-of-wave introduction (miniwave 0)
         if self.miniwave == 0 && !self.start_intro_done {
@@ -699,6 +704,7 @@ impl Game {
                 if level < self.pathways[pidx].levels.len() {
                     let kind = self.pathways[pidx].levels[level].pick(&mut rng);
                     let lane = rng.random_range(0..LANES);
+                    self.preview_cost = kind.spawn_cost();
                     self.enemies.push(Enemy::new(kind, lane));
                     self.preview_pathway = Some(pidx);
                 }
@@ -1056,6 +1062,7 @@ impl Game {
                 self.mid_intro_done = false;
                 self.preview_sent = false;
                 self.preview_pathway = None;
+                self.preview_cost = 0.0;
                 self.burst_timer = 0.0;
                 self.timeskip_given = false;
                 self.invested = false;
@@ -1094,7 +1101,7 @@ impl Game {
                 DefenderKind::Pencil => {
                     if def.attack_timer >= 0.8 {
                         let cx = Self::grid_origin().x + def.col as f32 * CELL_W + CELL_W;
-                        let range = CELL_W * 1.05;
+                        let range = CELL_W * 1.15;
                         for enemy in &mut self.enemies {
                             if enemy.lane == def.lane
                                 && enemy.x > cx - 10.0
@@ -1112,7 +1119,7 @@ impl Game {
                 DefenderKind::Pen => {
                     if def.attack_timer >= 0.8 {
                         let cx = Self::grid_origin().x + def.col as f32 * CELL_W + CELL_W;
-                        let range = CELL_W * 2.05;
+                        let range = CELL_W * 2.15;
                         for enemy in &mut self.enemies {
                             if enemy.lane == def.lane
                                 && enemy.x > cx - 10.0
