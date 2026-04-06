@@ -467,10 +467,20 @@ fn load_highscore() -> Option<f64> {
 #[cfg(target_arch = "wasm32")]
 fn save_highscore(_time: f64) {}
 
+// 100 HP over one wave (25 miniwaves * 3s = 75s)
+const DEFENDER_REGEN_RATE: f32 = 100.0 / (MINIWAVES as f32 * MINIWAVE_INTERVAL);
+
+struct DeathEffect {
+    x: f32,
+    y: f32,
+    timer: f32,
+}
+
 struct Game {
     defenders: Vec<Defender>,
     projectiles: Vec<Projectile>,
     enemies: Vec<Enemy>,
+    death_effects: Vec<DeathEffect>,
     ink: i32,
     ink_timer: f32,
     selected: Option<Tool>,
@@ -525,6 +535,7 @@ impl Game {
             defenders: Vec::new(),
             projectiles: Vec::new(),
             enemies: Vec::new(),
+            death_effects: Vec::new(),
             ink: 200,
             ink_timer: 0.0,
             selected: Some(Tool::Place(DefenderKind::Pencil)),
@@ -573,7 +584,7 @@ impl Game {
                         | PathwayLevel::CoinFlip(EnemyKind::ElectronicEraser, _)
                         | PathwayLevel::CoinFlip(_, EnemyKind::ElectronicEraser)
                 );
-                if has_electronic && self.wave < 6 {
+                if has_electronic && (self.wave < 6 || !self.mid_intro_done) {
                     continue;
                 }
                 result.push(i);
@@ -1234,7 +1245,9 @@ impl Game {
                             if def.lane == enemy.lane {
                                 let dx =
                                     Self::grid_origin().x + def.col as f32 * CELL_W + CELL_W / 2.0;
-                                if (enemy.x - dx).abs() < CELL_W * 0.5 {
+                                if (enemy.x - dx).abs() < CELL_W * 0.5 && def.hp > 0.0 {
+                                    let c = Self::cell_center(def.col, def.lane);
+                                    self.death_effects.push(DeathEffect { x: c.x, y: c.y, timer: 0.4 });
                                     def.hp = 0.0;
                                 }
                             }
@@ -1247,7 +1260,9 @@ impl Game {
                             if def.lane == enemy.lane {
                                 let dx =
                                     Self::grid_origin().x + def.col as f32 * CELL_W + CELL_W / 2.0;
-                                if (enemy.x - dx).abs() < CELL_W * 0.5 {
+                                if (enemy.x - dx).abs() < CELL_W * 0.5 && def.hp > 0.0 {
+                                    let c = Self::cell_center(def.col, def.lane);
+                                    self.death_effects.push(DeathEffect { x: c.x, y: c.y, timer: 0.4 });
                                     def.hp = 0.0;
                                 }
                             }
@@ -1469,6 +1484,19 @@ impl Game {
                 return;
             }
         }
+
+        // Defender regen
+        for def in &mut self.defenders {
+            if def.hp > 0.0 {
+                def.hp = (def.hp + DEFENDER_REGEN_RATE * dt).min(def.kind.hp());
+            }
+        }
+
+        // Update death effects
+        for fx in &mut self.death_effects {
+            fx.timer -= dt;
+        }
+        self.death_effects.retain(|fx| fx.timer > 0.0);
 
         self.enemies.retain(|e| e.alive());
         self.defenders.retain(|d| d.hp > 0.0);
@@ -1883,6 +1911,25 @@ impl eframe::App for Game {
                         _ => {}
                     }
                 }
+            }
+
+            // --- Draw death effects (instant kill) ---
+            for fx in &self.death_effects {
+                let t = fx.timer / 0.4; // 1.0 -> 0.0
+                let alpha = (t * 255.0) as u8;
+                let size = 20.0 * (1.0 + (1.0 - t) * 0.5);
+                let color = egui::Color32::from_rgba_premultiplied(255, 50, 50, alpha);
+                let stroke = egui::Stroke::new(3.0, color);
+                let c = egui::pos2(fx.x, fx.y);
+                // Draw an X
+                painter.line_segment(
+                    [egui::pos2(c.x - size, c.y - size), egui::pos2(c.x + size, c.y + size)],
+                    stroke,
+                );
+                painter.line_segment(
+                    [egui::pos2(c.x + size, c.y - size), egui::pos2(c.x - size, c.y + size)],
+                    stroke,
+                );
             }
 
             // --- Draw projectiles ---
