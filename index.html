@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pencils vs Erasers</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: #f5f0e6;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #container {
+            display: flex;
+            margin-top: 20px;
+            box-shadow: 0 2px 16px rgba(0,0,0,0.12);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        #the_canvas_id {
+            width: 580px;
+            height: 550px;
+            display: block;
+        }
+        #tutorial {
+            width: 320px;
+            height: 550px;
+            background: #faf8f4;
+            border-left: 1px solid #ddd;
+            overflow-y: auto;
+            padding: 16px 18px;
+            box-sizing: border-box;
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 14px;
+            color: #333;
+            line-height: 1.5;
+        }
+        #tutorial h1 { font-size: 20px; text-align: center; margin: 0 0 2px 0; }
+        #tutorial .subtitle { text-align: center; color: #888; font-size: 13px; margin-bottom: 12px; }
+        #tutorial hr { border: none; border-top: 1px solid #ddd; margin: 10px 0; }
+        #tutorial h2 { font-size: 15px; margin: 12px 0 6px 0; }
+        #tutorial p { margin: 0 0 8px 0; }
+        #tutorial .closing { font-style: italic; color: #888; margin-top: 8px; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="the_canvas_id"></canvas>
+        <div id="tutorial">
+            <h1>Pencils vs Erasers</h1>
+            <div class="subtitle">a tower defense game</div>
+            <hr>
+
+            <h2>How to Play</h2>
+            <p>Pick a tower, click to place it. Survive 6 waves. Good luck with that.</p>
+
+            <h2>Towers</h2>
+            <p><b>Pencil</b> &mdash; Melee. Cheap. Will carry you harder than your group project partners ever did.</p>
+            <p><b>Pen</b> &mdash; Ranged. The pencil's overachieving sibling who studied abroad.</p>
+            <p><b>Notebook</b> &mdash; Can't attack. Just absorbs damage. The unpaid intern of your defense.</p>
+            <p><b>Highlighter</b> &mdash; Hits every enemy in the lane. Finally, a tower with ambition.</p>
+            <p><b>Marker</b> &mdash; 600 ink. You'll look at the price, look at your ink, and quietly select pencil again.</p>
+            <p><b>Ink Blob</b> &mdash; One-time use nuke. Clears a lane. You only get one per game so use it wisely. Or panic-click it on wave 2. We won't judge.</p>
+
+            <h2>Enemies</h2>
+            <p>About 6 types. Pink erasers walk and erase. Standard.</p>
+            <p>Some come gift-wrapped. Nobody asked for this gift. The wrapping is extra armor.</p>
+            <p>White-out is a scouting unit. It walks across and leaves. Harmless. Don't bother targeting it.</p>
+            <p>Highlighter erasers are in this game. Which enemy? What does it do? We'll never tell. Think about it every time something weird happens.</p>
+            <p>Later waves introduce new enemy types. Our playtester quit during testing. He was also the developer. He still shipped it.</p>
+
+            <h2>Tips</h2>
+            <p>Clear enemies fast for a timeskip and ink bonus.</p>
+            <p>Notebooks block your own projectiles, so don't place them in front of pens.</p>
+            <p>The pencil case (trash) button is there because even the game knows you'll make bad decisions.</p>
+
+            <hr>
+            <p class="closing">This game has no difficulty settings. This is the easy mode.</p>
+        </div>
+    </div>
+    <link data-trunk rel="rust" data-wasm-opt="2" />
+    <script>
+        // Firefox bug: devicePixelContentBoxSize returns CSS pixels instead of
+        // device pixels, so eframe sets the wrong canvas buffer size.
+        function fixCanvasBuffer() {
+            const c = document.getElementById("the_canvas_id");
+            const dpr = window.devicePixelRatio || 1;
+            const rect = c.getBoundingClientRect();
+            const expectedW = Math.round(rect.width * dpr);
+            const expectedH = Math.round(rect.height * dpr);
+            if (c.width !== expectedW || c.height !== expectedH) {
+                c.width = expectedW;
+                c.height = expectedH;
+            }
+        }
+        setTimeout(fixCanvasBuffer, 200);
+        setTimeout(fixCanvasBuffer, 500);
+        setTimeout(fixCanvasBuffer, 1000);
+    </script>
+</body>
+</html>
